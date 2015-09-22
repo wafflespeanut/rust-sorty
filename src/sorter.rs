@@ -15,16 +15,25 @@ impl LintPass for Sorter {
     }
 
     fn check_mod(&mut self, cx: &Context, module: &Mod, _span: Span, _id: u32) {
-        let session_codemap = cx.tcx.sess.codemap();
+        let session_codemap = cx.tcx.sess.codemap();    // required only for checking inline mods
         let mut extern_crates = Vec::new();
         let mut uses = Vec::new();
         let mut mods = Vec::new();
+
         for item in &module.items {
             let item_name = format!("{}", item.ident.name.as_str());
             let item_span = item.span;
             match item.node.clone() {
-                Item_::ItemExternCrate(_) if item_name != "std" => {
-                    let item_attrs = get_item_attrs(&item, false);
+                Item_::ItemExternCrate(optional_name) if item_name != "std" => {
+                    // We've put the declaration here because, we have to sort crate declarations
+                    // with respect to the renamed version (instead of the old one).
+                    // Since we also don't have `pub` (indicated by the `false` below),
+                    // we could just append the declaration to the attributes.
+                    let mut item_attrs = get_item_attrs(&item, false);
+                    item_attrs = match optional_name {    // for `extern crate foo as bar`
+                        Some(old_name) => format!("{}extern crate {} as", item_attrs, old_name),
+                        None => format!("{}extern crate", item_attrs),
+                    };
                     extern_crates.push((item_name, item_attrs, item_span, false));
                 },
                 Item_::ItemMod(module) => {
@@ -41,9 +50,12 @@ impl LintPass for Sorter {
                         ViewPath_::ViewPathSimple(ref ident, ref path) => {
                             let path_str = path_to_string(&path);
                             let name = ident.name.as_str();
-                            let renamed = match path_str.ends_with(&*name) {
-                                true => path_str,   // for checking `use foo as bar`
-                                false => format!("{} as {}", &path_str, &name),
+                            let renamed = {     // for checking `use foo as bar`
+                                let split = path_str.split(":").collect::<Vec<&str>>();
+                                match split[split.len() - 1] == &*name {
+                                    true => path_str.clone(),
+                                    false => format!("{} as {}", &path_str, &name),
+                                }
                             };
                             uses.push((renamed, item_attrs, item_span, false));
                         },
@@ -73,7 +85,7 @@ impl LintPass for Sorter {
                             let mut warn = false;
                             for i in 0..old_list.len() {
                                 if old_list[i] != new_list[i] {
-                                    warn = true;
+                                    warn = true;    // check whether the use list is sorted
                                     break;
                                 }
                             }
@@ -94,7 +106,8 @@ impl LintPass for Sorter {
             }
         }
 
-        check_sort(&extern_crates, cx, "crate declarations", "extern crate");
+        // we don't include the declaration here, because we've already appended it with the attributes
+        check_sort(&extern_crates, cx, "crate declarations", "");
         check_sort(&mods, cx, "module declarations (other than inline modules)", "mod");
         check_sort(&uses, cx, "use statements", "use");
 
