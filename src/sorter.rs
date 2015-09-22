@@ -56,7 +56,7 @@ impl LintPass for Sorter {
                                             }).collect::<Vec<String>>();
                             let mut new_list = old_list.clone();
                             new_list.sort_by(|a, b| {
-                                match *a == "self" {
+                                match *a == "self" {    // `self` should be first in an use list
                                     true => Ordering::Less,
                                     false => a.cmp(b),
                                 }
@@ -67,7 +67,7 @@ impl LintPass for Sorter {
                                     warn = true;
                                     break;
                                 }
-                            }   // the `connect` methods should be replaced with `join` ASAP!
+                            }
                             let use_list = format!("{}::{{{}}}", path_to_string(&path), new_list.connect(", "));
                             uses.push((use_list, item_attrs, path.span, warn));
                         },
@@ -92,16 +92,20 @@ impl LintPass for Sorter {
         fn get_item_attrs(item: &Item, pub_check: bool) -> String {
             let attr_vec = item.attrs
                            .iter()
-                           .map(|attr| {
+                           .filter_map(|attr| {
                                 let meta_item = attr.node.value.node.clone();
-                                format!("#[{}]", get_meta_as_string(&meta_item))
+                                let meta_string = get_meta_as_string(&meta_item);
+                                match meta_string.starts_with("doc = ") {
+                                    true => None,
+                                    false => Some(format!("#[{}]", meta_string)),
+                                }
                            }).collect::<Vec<String>>();
             let attr_string = attr_vec.connect("\n");
             match item.vis {
                 Visibility::Public if pub_check => {
                     match attr_string.is_empty() {
                         true => "pub ".to_owned(),
-                        false => attr_string + "\npub ",
+                        false => attr_string + "\npub ",    // `pub` for mods and uses
                     }
                 },
                 _ => {
@@ -114,7 +118,7 @@ impl LintPass for Sorter {
         }
 
         fn get_meta_as_string(meta_item: &MetaItem_) -> String {
-            match *meta_item {
+            match *meta_item {      // recursively collect the information from meta items into Strings
                 MetaItem_::MetaWord(ref string) => format!("{}", string),
                 MetaItem_::MetaList(ref string, ref meta_items) => {
                     let stuff = meta_items
@@ -128,25 +132,38 @@ impl LintPass for Sorter {
                     let value = match literal.node {
                         Lit_::LitStr(ref inner_str, _style) => inner_str,
                         _ => panic!("unexpected literal found for meta item!"),
-                    };
-                    format!("{} = \"{}\"", string, value)
+                    }; format!("{} = \"{}\"", string, value)
                 },
             }
         }
 
+        // slice of tuples with a name, related attributes, spans and whether to warn for an use list
         fn check_sort(old_list: &[(String, String, Span, bool)], cx: &Context, kind: &str, syntax: &str) {
             let length = old_list.len();
             let mut new_list = old_list
                                 .iter()
                                 .map(|&(ref name, ref attrs, _span, warn)| (name.clone(), attrs.clone(), warn))
                                 .collect::<Vec<(String, String, bool)>>();
-            new_list.sort_by(|&(ref str_a, _, _), &(ref str_b, _, _)| str_a.cmp(str_b));
+            new_list.sort_by(|&(ref str_a, ref attr_a, _), &(ref str_b, ref attr_b, _)| {
+                match attr_b.ends_with("pub ") {
+                    true => {   // a closure only to move the ordered `pub` statements to the bottom
+                        let new_str_b = "~".to_owned() + &str_b;
+                        match attr_a.ends_with("pub ") {
+                            true => {   // since `~` is superior to almost all the ASCII chars
+                                let new_str_a = "~".to_owned() + &str_a;
+                                new_str_a.cmp(&new_str_b)
+                            },
+                            false => str_a.cmp(&new_str_b)
+                        }
+                    },
+                    false => str_a.cmp(str_b),
+                }
+            });
 
             let mut span: Option<Span> = None;
             let message = format!("{} should be in alphabetical order!\nTry this...\n", kind);
             let mut suggested_list = Vec::new();
             suggested_list.push(message);
-
             for i in 0..length {
                 let name = new_list[i].0.clone();
                 if (old_list[i].0 != name) || new_list[i].2 {
@@ -155,7 +172,7 @@ impl LintPass for Sorter {
                     span = match span {
                         Some(old_span) => {
                             let mut sp = old_span;
-                            sp.hi = old_list[i].2.hi;
+                            sp.hi = old_list[i].2.hi;   // increase the span to include more lines
                             Some(sp)
                         },
                         None => Some(old_list[i].2),
