@@ -7,13 +7,14 @@ use syntax::print::pprust::path_to_string;
 declare_lint!(UNSORTED_DECLARATIONS, Warn,
               "Warn when the declarations of crates or modules are not in alphabetical order");
 
-pub struct Sorter;
+pub struct Sorty;
 
-impl LintPass for Sorter {
+impl LintPass for Sorty {
     fn get_lints(&self) -> LintArray {
         lint_array!(UNSORTED_DECLARATIONS)
     }
 
+    // checking a module is enough for our purpose
     fn check_mod(&mut self, cx: &Context, module: &Mod, _span: Span, _id: u32) {
         let session_codemap = cx.tcx.sess.codemap();    // required only for checking inline mods
         let mut extern_crates = Vec::new();
@@ -21,6 +22,7 @@ impl LintPass for Sorter {
         let mut mods = Vec::new();
 
         for item in &module.items {
+            // I've utilized `format!` most of the time, because we have a mixture of Strings & InternedStrings
             let item_name = format!("{}", item.ident.name.as_str());
             let item_span = item.span;
             match item.node.clone() {
@@ -162,7 +164,7 @@ impl LintPass for Sorter {
                 MetaItem_::MetaNameValue(ref string, ref literal) => {
                     let value = match literal.node {
                         Lit_::LitStr(ref inner_str, _style) => inner_str,
-                        _ => panic!("unexpected literal found for meta item!"),
+                        _ => panic!("unexpected literal found for meta item!"),     // which doesn't happen
                     }; format!("{} = \"{}\"", string, value)
                 },
             }

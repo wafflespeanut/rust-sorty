@@ -5,12 +5,12 @@ extern crate syntax;
 #[macro_use]
 extern crate rustc;
 
-pub mod sorter;
+pub mod sorty;
 
 use rustc::lint::LintPassObject;
 use rustc::plugin::Registry;
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
-    reg.register_lint_pass(box sorter::Sorter as LintPassObject);
+    reg.register_lint_pass(box sorty::Sorty as LintPassObject);
 }
