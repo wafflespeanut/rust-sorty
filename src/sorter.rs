@@ -1,6 +1,6 @@
 use rustc::lint::{Context, LintPass, LintArray};
 use std::cmp::Ordering;
-use syntax::ast::{Mod, Item, Item_, Lit_, PathListItem_, ViewPath_, Visibility, MetaItem_};
+use syntax::ast::{Item, Item_, Lit_, MetaItem_, Mod, PathListItem_, ViewPath_, Visibility};
 use syntax::codemap::Span;
 use syntax::print::pprust::path_to_string;
 
@@ -53,8 +53,9 @@ impl LintPass for Sorter {
                                            .map(|&list_item| {
                                                 match list_item.node {
                                                     PathListItem_::PathListMod { .. } =>
-                                                        "self".to_owned(),
+                                                        "self".to_owned(),      // this must be `self`
                                                     PathListItem_::PathListIdent { name, .. } => {
+                                                        // we don't have any renames inside brackets in servo
                                                         let interned = name.name.as_str();
                                                         let string = &*interned;
                                                         string.to_owned()
@@ -94,21 +95,28 @@ impl LintPass for Sorter {
         }
 
         check_sort(&extern_crates, cx, "crate declarations", "extern crate");
-        check_sort(&mods, cx, "module declarations (ignoring the inline modules)", "mod");
+        check_sort(&mods, cx, "module declarations (other than inline modules)", "mod");
         check_sort(&uses, cx, "use statements", "use");
 
-        // for collecting, formatting & filtering the meta items, and checking the visibility
+        // for collecting, formatting & filtering the attributes (and checking the visibility)
         fn get_item_attrs(item: &Item, pub_check: bool) -> String {
-            let attr_vec = item.attrs
-                           .iter()
-                           .filter_map(|attr| {
-                                let meta_item = attr.node.value.node.clone();
-                                let meta_string = get_meta_as_string(&meta_item);
-                                match meta_string.starts_with("doc = ") {
-                                    true => None,
-                                    false => Some(format!("#[{}]", meta_string)),
-                                }
-                           }).collect::<Vec<String>>();
+            let mut attr_vec = item.attrs
+                               .iter()
+                               .filter_map(|attr| {
+                                   let meta_item = attr.node.value.node.clone();
+                                   let meta_string = get_meta_as_string(&meta_item);
+                                   match meta_string.starts_with("doc = ") {
+                                       true => None,
+                                       false => Some(format!("#[{}]", meta_string)),
+                                   }
+                               }).collect::<Vec<String>>();
+            attr_vec.sort_by(|a, b| {
+                match (&**a, &**b) {    // put `macro_use` first for later checking
+                    ("#[macro_use]", _) => Ordering::Less,
+                    (_, "#[macro_use]") => Ordering::Greater,
+                    _ => a.cmp(b),
+                }
+            });
             let attr_string = attr_vec.connect("\n");
             match item.vis {
                 Visibility::Public if pub_check => {
@@ -126,7 +134,7 @@ impl LintPass for Sorter {
             }
         }
 
-        // recursively collect the information from meta items into Strings
+        // collect the information from meta items into Strings
         fn get_meta_as_string(meta_item: &MetaItem_) -> String {
             match *meta_item {
                 MetaItem_::MetaWord(ref string) => format!("{}", string),
@@ -148,7 +156,7 @@ impl LintPass for Sorter {
         }
 
         // checks the sorting of all the declarations and raises warnings whenever necessary
-        // takes a slice of tuples with a name, related attributes, spans and whether to warn for an unordered use list
+        // takes a slice of tuples with name, related attributes, spans and whether to warn for unordered use lists
         fn check_sort(old_list: &[(String, String, Span, bool)], cx: &Context, kind: &str, syntax: &str) {
             let length = old_list.len();
             let mut new_list = old_list
@@ -156,15 +164,13 @@ impl LintPass for Sorter {
                                 .map(|&(ref name, ref attrs, _span, warn)| (name.clone(), attrs.clone(), warn))
                                 .collect::<Vec<(String, String, bool)>>();
             new_list.sort_by(|&(ref str_a, ref attr_a, _), &(ref str_b, ref attr_b, _)| {
-                // a closure only to move the ordered `pub` statements to the bottom
-                let new_str_a = "~".to_owned() + &str_a;    // since `~` is superior to almost all the ASCII chars
-                let new_str_b = "~".to_owned() + &str_b;
-                match (attr_a.ends_with("pub "), attr_b.ends_with("pub ")) {
-                    (true, true) => new_str_a.cmp(&new_str_b),
-                    (true, false) => new_str_a.cmp(str_b),
-                    (false, true) => str_a.cmp(&new_str_b),
-                    (false, false) => str_a.cmp(str_b),
-                }
+                // move the `pub` statements below (with `~` since it's on the farther side of ASCII)
+                let mut new_str_a = str_for_biased_sort(&str_a, attr_a.ends_with("pub "), "~");
+                let mut new_str_b = str_for_biased_sort(&str_b, attr_b.ends_with("pub "), "~");
+                // move the #[macro_use] stuff above (with `!` since it's on the lower extreme of ASCII)
+                new_str_a = str_for_biased_sort(&new_str_a, attr_a.starts_with("#[macro_use]"), "!");
+                new_str_b = str_for_biased_sort(&new_str_b, attr_b.starts_with("#[macro_use]"), "!");
+                new_str_a.cmp(&new_str_b)
             });
 
             let mut index = 0;
@@ -173,7 +179,7 @@ impl LintPass for Sorter {
                 if (old_list[i].0 != new_list[i].0) || new_list[i].2 {
                     span = Some(old_list[i].2);
                     index = i;      // only to find the index of the first unsorted declaration
-                    break;
+                    break;          // because, we'll be printing everything following the first unsorted one
                 }
             }
 
@@ -189,10 +195,18 @@ impl LintPass for Sorter {
                                           }).collect::<Vec<String>>();
                     let suggestion = format!("{} should be in alphabetical order!\nTry this...\n\n{}\n\n",
                                             kind, suggestion_list.connect("\n"));
-                    // unwrapping the value here, because it's certain there's something in `span`
+                    // unwrapping the value here, because it's quite certain that there's something in `span`
                     cx.span_lint(UNSORTED_DECLARATIONS, span.unwrap(), &suggestion);
                 },
                 None => (),
+            }
+
+            // prepend given characters to names for biased sorting
+            fn str_for_biased_sort(string: &String, choice: bool, prepend_char: &str) -> String {
+                match choice {
+                    true => prepend_char.to_owned() + &**string,
+                    false => string.clone()
+                }
             }
         }
     }
