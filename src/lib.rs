@@ -1,9 +1,9 @@
 #![feature(plugin_registrar, plugin, box_syntax, rustc_private)]
 
 #[macro_use]
-extern crate syntax;
-#[macro_use]
 extern crate rustc;
+#[macro_use]
+extern crate syntax;
 
 pub mod sorty;
 

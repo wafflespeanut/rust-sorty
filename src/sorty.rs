@@ -4,6 +4,7 @@ use syntax::ast::{Item, Item_, Lit_, MetaItem_, Mod, PathListItem_, ViewPath_, V
 use syntax::codemap::Span;
 use syntax::print::pprust::path_to_string;
 
+// Warn unsorted declarations by default (since denying is a poor choice for styling lints)
 declare_lint!(UNSORTED_DECLARATIONS, Warn,
               "Warn when the declarations of crates or modules are not in alphabetical order");
 
@@ -14,7 +15,7 @@ impl LintPass for Sorty {
         lint_array!(UNSORTED_DECLARATIONS)
     }
 
-    // checking a module is enough for our purpose
+    // walking through all the modules is enough for our purpose
     fn check_mod(&mut self, cx: &Context, module: &Mod, _span: Span, _id: u32) {
         let session_codemap = cx.tcx.sess.codemap();    // required only for checking inline mods
         let mut extern_crates = Vec::new();
@@ -22,7 +23,7 @@ impl LintPass for Sorty {
         let mut mods = Vec::new();
 
         for item in &module.items {
-            // I've utilized `format!` most of the time, because we have a mixture of Strings & InternedStrings
+            // I've used `format!` most of the time, because we have a mixture of Strings & InternedStrings
             let item_name = format!("{}", item.ident.name.as_str());
             let item_span = item.span;
             match item.node.clone() {
@@ -35,9 +36,9 @@ impl LintPass for Sorty {
                     item_attrs = match optional_name {    // for `extern crate foo as bar`
                         Some(old_name) => format!("{}extern crate {} as", item_attrs, old_name),
                         None => format!("{}extern crate", item_attrs),
-                    };
-                    extern_crates.push((item_name, item_attrs, item_span, false));
+                    }; extern_crates.push((item_name, item_attrs, item_span, false));
                 },
+
                 Item_::ItemMod(module) => {
                     let mod_invoked_file = session_codemap.span_to_filename(item.span);
                     let mod_declared_file = session_codemap.span_to_filename(module.inner);
@@ -46,22 +47,24 @@ impl LintPass for Sorty {
                         mods.push((item_name, item_attrs, item_span, false));
                     }
                 },
+
                 Item_::ItemUse(spanned) => {
                     let item_attrs = get_item_attrs(&item, true);
                     match spanned.node {
                         ViewPath_::ViewPathSimple(ref ident, ref path) => {
                             let path_str = path_to_string(&path);
                             let name = ident.name.as_str();
-                            let renamed = {     // for checking `use foo as bar`
+                            let renamed = {     // for `use foo as bar`
                                 let split = path_str.split(":").collect::<Vec<&str>>();
                                 match split[split.len() - 1] == &*name {
                                     true => path_str.clone(),
                                     false => format!("{} as {}", &path_str, &name),
                                 }
-                            };
-                            uses.push((renamed, item_attrs, item_span, false));
+                            }; uses.push((renamed, item_attrs, item_span, false));
                         },
+
                         ViewPath_::ViewPathList(ref path, ref list) => {
+                            // TODO: track the renamed items in use lists
                             let old_list = list
                                            .iter()
                                            .map(|&list_item| {
@@ -69,13 +72,13 @@ impl LintPass for Sorty {
                                                     PathListItem_::PathListMod { .. } =>
                                                         "self".to_owned(),      // this must be `self`
                                                     PathListItem_::PathListIdent { name, .. } => {
-                                                        // we don't have any renames inside brackets in servo
                                                         let interned = name.name.as_str();
                                                         let string = &*interned;
                                                         string.to_owned()
                                                     },
                                                 }
                                             }).collect::<Vec<String>>();
+
                             let mut new_list = old_list.clone();
                             new_list.sort_by(|a, b| {
                                 match (&**a, &**b) {    // `self` should be first in an use list
@@ -84,16 +87,17 @@ impl LintPass for Sorty {
                                     _ => a.cmp(b),
                                 }
                             });
+
                             let mut warn = false;
+                            let use_list = format!("{}::{{{}}}", path_to_string(&path), new_list.connect(", "));
                             for i in 0..old_list.len() {
                                 if old_list[i] != new_list[i] {
                                     warn = true;    // check whether the use list is sorted
                                     break;
                                 }
-                            }
-                            let use_list = format!("{}::{{{}}}", path_to_string(&path), new_list.connect(", "));
-                            uses.push((use_list, item_attrs, path.span, warn));
+                            } uses.push((use_list, item_attrs, path.span, warn));
                         },
+
                         ViewPath_::ViewPathGlob(ref path) => {
                             let path_str = path_to_string(&path) + "::*";
                             // we don't have any use statements like `use std::prelude::*`
@@ -108,7 +112,7 @@ impl LintPass for Sorty {
             }
         }
 
-        // we don't include the declaration here, because we've already appended it with the attributes
+        // we don't include the crate declaration here, because we've already appended it with the attributes
         check_sort(&extern_crates, cx, "crate declarations", "");
         check_sort(&mods, cx, "module declarations (other than inline modules)", "mod");
         check_sort(&uses, cx, "use statements", "use");
@@ -125,14 +129,15 @@ impl LintPass for Sorty {
                                        false => Some(format!("#[{}]", meta_string)),
                                    }
                                }).collect::<Vec<String>>();
+
             attr_vec.sort_by(|a, b| {
                 match (&**a, &**b) {    // put `macro_use` first for later checking
                     ("#[macro_use]", _) => Ordering::Less,
                     (_, "#[macro_use]") => Ordering::Greater,
                     _ => a.cmp(b),
                 }
-            });
-            let attr_string = attr_vec.connect("\n");
+            }); let attr_string = attr_vec.connect("\n");
+
             match item.vis {
                 Visibility::Public if pub_check => {
                     match attr_string.is_empty() {
@@ -164,7 +169,7 @@ impl LintPass for Sorty {
                 MetaItem_::MetaNameValue(ref string, ref literal) => {
                     let value = match literal.node {
                         Lit_::LitStr(ref inner_str, _style) => inner_str,
-                        _ => panic!("unexpected literal found for meta item!"),     // which doesn't happen
+                        _ => panic!("unexpected literal found for meta item!"),     // which doesn't really happen
                     }; format!("{} = \"{}\"", string, value)
                 },
             }

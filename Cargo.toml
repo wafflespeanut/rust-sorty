@@ -1,4 +1,4 @@
 [package]
-name = "rust-sorter"
+name = "sorty"
 version = "0.1.0"
 authors = ["Ravi Shankar <wafflespeanut@gmail.com>"]
