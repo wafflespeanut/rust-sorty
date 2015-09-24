@@ -1,4 +1,4 @@
-## Detailed sample:
+## Detailed Example:
 
 Let's try sorting the declarations in an [older checkout of `gfx/lib.rs` module](https://github.com/servo/servo/blob/8f1469eb08a437bcc6cfb510334be2b6430b4a8f/components/gfx/lib.rs) in Servo (I chose this file specifically, because it covers all the use cases). Once we add the plugin to the dependencies, we get some pretty warnings.
 
@@ -109,8 +109,10 @@ extern crate freetype;
     gfx/lib.rs:26 extern crate log;
     gfx/lib.rs:27 extern crate serde;
     gfx/lib.rs:28
-    gfx/lib.rs:29 extern crate azure;we can't
-                                                      ...
+    gfx/lib.rs:29 extern crate azure;
+    gfx/lib.rs:30 #[macro_use] extern crate bitflags;
+    gfx/lib.rs:31 extern crate fnv;
+                  ...
 
 As you can see, **sorty is blind to spaces and comments** (for now). You should always remember that it's a plugin. All it does is play with the AST and rebuild the input back from there. So, the output is as expected - stuff with `#[macro_use]` are sorted and moved to the top, while those with other attributes are below them.
 
@@ -180,7 +182,7 @@ and, we get...
     gfx/lib.rs:83 pub mod display_list;
     gfx/lib.rs:84 pub mod paint_task;
     gfx/lib.rs:85
-                                                          ...
+                  ...
 
 The comments and spaces are ignored, just like I'd said previously. And, the private modules are sorted and moved to the top, while the public modules are sorted and moved to the bottom. If there were any `#[macro_use]`, it would've been moved to the top irrespective of whether it's public or private.
 
@@ -190,7 +192,7 @@ So, that should be taken care of as well...
 
 ### `use`
 
-There's only one `use` statement in `gfx/lib.rs`, which sorty doesn't mind. But, since it makes use of `check_mod` function, `rustc` checks all the modules, by which I mean that it walks into the modules and submodules (and subsubmodules and ...) of the crate, and so we have warnings for the `use` statements declared there. Let's choose [`gfx/paint_task.rs`](https://github.com/servo/servo/blob/8f1469eb08a437bcc6cfb510334be2b6430b4a8f/components/gfx/paint_task.rs), which has the following contents...
+There's only one `use` statement in `gfx/lib.rs`, which sorty doesn't mind. But, since it makes use of [`check_mod`](https://manishearth.github.io/rust-internals-docs/rustc/lint/trait.EarlyLintPass.html#method.check_mod) function, `rustc` walks into the other modules and submodules (and subsubmodules and ...) of the crate, and so we have warnings for the `use` statements declared there. For our example, let's choose [`gfx/paint_task.rs`](https://github.com/servo/servo/blob/8f1469eb08a437bcc6cfb510334be2b6430b4a8f/components/gfx/paint_task.rs), which has the following contents...
 
 ``` rust
 use azure::AzFloat;
@@ -231,7 +233,7 @@ use util::task_state;
 
 and, we get the following warning...
 
-    /gfx/paint_task.rs:8:5: 40:22 warning: use statements should be in alphabetical order!
+    gfx/paint_task.rs:8:5: 40:22 warning: use statements should be in alphabetical order!
     Try this...
 
     use azure::azure_hl::{BackendType, Color, DrawTarget, SurfaceFormat};
@@ -275,8 +277,8 @@ and, we get the following warning...
     gfx/paint_task.rs:11 use euclid::Matrix4;
     gfx/paint_task.rs:12 use euclid::point::Point2D;
     gfx/paint_task.rs:13 use euclid::rect::Rect;
-                                                                 ...
+                         ...
 
-As you can see, the first declaration `use azure::AzFloat;` has been left out, and the span has began from line 8 instead of line 7. This means that in the eyes of sorty, the first declaration stays right where it was even after sorting, but the statements following it aren't following the rule (though the second line stays where it was, its list items aren't sorted!), and so it throws the warning on all of the remaining statements.
+As you can see, the first declaration `use azure::AzFloat;` has been left out, and the span has began from line 8 instead of line 7. This means that in the eyes of sorty, the first declaration stays right where it was even after sorting, but the statements following it aren't following the rule (though the second line stays where it was, its list items aren't sorted!), and so it throws the warning for all the remaining statements.
 
-Also, note that sorty doesn't care about the other statements. If one statement's wrong, then it starts printing out all the following statements, because it's easier for everyone to just copy-paste everything instead of looking for the exact span of code.
+Also, note that sorty doesn't care about how many correct statements you have. Even if one declaration's in the wrong place, then it starts printing out all the following statements, because it's easier for everyone to just *copy-paste* everything instead of looking for the exact span in lengthy code.

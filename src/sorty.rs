@@ -1,4 +1,4 @@
-use rustc::lint::{Context, LintPass, LintArray};
+use rustc::lint::{EarlyContext, EarlyLintPass, LintArray, LintContext, LintPass};
 use std::cmp::Ordering;
 use syntax::ast::{Item, Item_, Lit_, MetaItem_, Mod, PathListItem_, ViewPath_, Visibility};
 use syntax::codemap::Span;
@@ -14,11 +14,13 @@ impl LintPass for Sorty {
     fn get_lints(&self) -> LintArray {
         lint_array!(UNSORTED_DECLARATIONS)
     }
+}
 
+impl EarlyLintPass for Sorty {
     // walking through all the modules is enough for our purpose
-    fn check_mod(&mut self, cx: &Context, module: &Mod, _span: Span, _id: u32) {
+    fn check_mod(&mut self, cx: &EarlyContext, module: &Mod, _span: Span, _id: u32) {
         // TODO: lint should stop ignoring the comments near the declarations
-        let session_codemap = cx.tcx.sess.codemap();    // required only for checking inline mods
+        let session_codemap = cx.sess.codemap();    // required only for checking inline mods
         let mut extern_crates = Vec::new();
         let mut uses = Vec::new();
         let mut mods = Vec::new();
@@ -90,7 +92,7 @@ impl LintPass for Sorty {
                             });
 
                             let mut warn = false;
-                            let use_list = format!("{}::{{{}}}", path_to_string(&path), new_list.connect(", "));
+                            let use_list = format!("{}::{{{}}}", path_to_string(&path), new_list.join(", "));
                             for i in 0..old_list.len() {
                                 if old_list[i] != new_list[i] {
                                     warn = true;    // check whether the use list is sorted
@@ -137,7 +139,7 @@ impl LintPass for Sorty {
                     (_, "#[macro_use]") => Ordering::Greater,
                     _ => a.cmp(b),
                 }
-            }); let attr_string = attr_vec.connect("\n");
+            }); let attr_string = attr_vec.join("\n");
 
             match item.vis {
                 Visibility::Public if pub_check => {
@@ -165,7 +167,7 @@ impl LintPass for Sorty {
                                 .map(|meta_item| {
                                     get_meta_as_string(&meta_item.node)
                                 }).collect::<Vec<String>>();
-                    format!("{}({})", string, stuff.connect(", "))
+                    format!("{}({})", string, stuff.join(", "))
                 },
                 MetaItem_::MetaNameValue(ref string, ref literal) => {
                     let value = match literal.node {
@@ -178,7 +180,7 @@ impl LintPass for Sorty {
 
         // checks the sorting of all the declarations and raises warnings whenever necessary
         // takes a slice of tuples with name, related attributes, spans and whether to warn for unordered use lists
-        fn check_sort(old_list: &[(String, String, Span, bool)], cx: &Context, kind: &str, syntax: &str) {
+        fn check_sort(old_list: &[(String, String, Span, bool)], cx: &EarlyContext, kind: &str, syntax: &str) {
             let length = old_list.len();
             let mut new_list = old_list
                                 .iter()
@@ -215,7 +217,7 @@ impl LintPass for Sorty {
                                               } format!("{}{} {};", new_list[i].1, syntax, new_list[i].0)
                                           }).collect::<Vec<String>>();
                     let suggestion = format!("{} should be in alphabetical order!\nTry this...\n\n{}\n\n",
-                                            kind, suggestion_list.connect("\n"));
+                                            kind, suggestion_list.join("\n"));
                     // unwrapping the value here, because it's quite certain that there's something in `span`
                     cx.span_lint(UNSORTED_DECLARATIONS, span.unwrap(), &suggestion);
                 },
