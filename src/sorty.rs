@@ -17,6 +17,7 @@ impl LintPass for Sorty {
 
     // walking through all the modules is enough for our purpose
     fn check_mod(&mut self, cx: &Context, module: &Mod, _span: Span, _id: u32) {
+        // TODO: lint should stop ignoring the comments near the declarations
         let session_codemap = cx.tcx.sess.codemap();    // required only for checking inline mods
         let mut extern_crates = Vec::new();
         let mut uses = Vec::new();
@@ -221,7 +222,7 @@ impl LintPass for Sorty {
                 None => (),
             }
 
-            // prepend given characters to names for biased sorting
+            // prepend given characters to the names for "biased" sorting
             fn str_for_biased_sort(string: &String, choice: bool, prepend_char: &str) -> String {
                 match choice {
                     true => prepend_char.to_owned() + &**string,
