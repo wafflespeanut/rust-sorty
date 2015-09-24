@@ -1,5 +1,7 @@
 ## rust-sorty
 
+[![Build Status](https://travis-ci.org/Wafflespeanut/rust-sorty.svg?branch=master)](https://travis-ci.org/Wafflespeanut/rust-sorty)
+
 A lint to help with sorting the `extern crate`, `mod` and `use` declarations, according to the style rules. Have a look at the [detailed example](https://github.com/Wafflespeanut/rust-sorty/tree/master/EXAMPLE.md) for a start! I guess it will be very handy for large projects written in Rust (well, at least once!).
 
 And yeah, this should actually be done by **[rustfmt](https://github.com/nrc/rustfmt)**, but it [doesn't have this option](https://github.com/nrc/rustfmt/issues/298) for now. So, this plugin would serve until `rustfmt` becomes intelligent enough to detect the unsorted declarations.
