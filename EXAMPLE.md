@@ -64,8 +64,15 @@ extern crate freetype;
 
 ... for which we get the following warning,
 
-    gfx/lib.rs:26:1: 70:23 warning: crate declarations should be in alphabetical order!
-    Try this...
+    gfx/lib.rs:26:1: 70:23 warning: crate declarations should be in alphabetical order!, #[warn(unsorted_declarations)] on by default
+    gfx/lib.rs:26 extern crate log;
+    gfx/lib.rs:27 extern crate serde;
+    gfx/lib.rs:28
+    gfx/lib.rs:29 extern crate azure;
+    gfx/lib.rs:30 #[macro_use] extern crate bitflags;
+    gfx/lib.rs:31 extern crate fnv;
+                  ...
+    gfx/lib.rs:26:1: 70:23 help: Try this...
 
     #[macro_use]
     extern crate bitflags;
@@ -104,15 +111,6 @@ extern crate freetype;
     extern crate style;
     extern crate time;
     extern crate url;
-
-    , #[warn(unsorted_declarations)] on by default
-    gfx/lib.rs:26 extern crate log;
-    gfx/lib.rs:27 extern crate serde;
-    gfx/lib.rs:28
-    gfx/lib.rs:29 extern crate azure;
-    gfx/lib.rs:30 #[macro_use] extern crate bitflags;
-    gfx/lib.rs:31 extern crate fnv;
-                  ...
 
 As you can see, **sorty is blind to spaces and comments** (for now). You should always remember that it's a plugin. All it does is play with the AST and rebuild the input back from there. So, the output is as expected - stuff with `#[macro_use]` are sorted and moved to the top, while those with other attributes are below them.
 
@@ -156,9 +154,15 @@ pub mod text;
 
 and, we get...
 
-    gfx/lib.rs:80:1: 101:14 warning: module declarations (other than inline modules)
-    should be in alphabetical order!
-    Try this...
+    gfx/lib.rs:80:1: 101:14 warning: module declarations (other than inline modules) should be in alphabetical order!, #[warn(unsorted_declarations)] on by default
+    gfx/lib.rs:80 mod paint_context;
+    gfx/lib.rs:81
+    gfx/lib.rs:82 #[path = "display_list/mod.rs"]
+    gfx/lib.rs:83 pub mod display_list;
+    gfx/lib.rs:84 pub mod paint_task;
+    gfx/lib.rs:85
+                  ...
+    gfx/lib.rs:80:1: 101:14 help: Try this...
 
     mod filters;
     mod paint_context;
@@ -174,15 +178,6 @@ and, we get...
     pub mod platform;
     #[path = "text/mod.rs"]
     pub mod text;
-
-    , #[warn(unsorted_declarations)] on by default
-    gfx/lib.rs:80 mod paint_context;
-    gfx/lib.rs:81
-    gfx/lib.rs:82 #[path = "display_list/mod.rs"]
-    gfx/lib.rs:83 pub mod display_list;
-    gfx/lib.rs:84 pub mod paint_task;
-    gfx/lib.rs:85
-                  ...
 
 The comments and spaces are ignored, just like I'd said previously. And, the private modules are sorted and moved to the top, while the public modules are sorted and moved to the bottom. If there were any `#[macro_use]`, it would've been moved to the top irrespective of whether it's public or private.
 
@@ -233,8 +228,15 @@ use util::task_state;
 
 and, we get the following warning...
 
-    gfx/paint_task.rs:8:5: 40:22 warning: use statements should be in alphabetical order!
-    Try this...
+    gfx/paint_task.rs:8:5: 40:22 warning: use statements should be in alphabetical order!, #[warn(unsorted_declarations)] on by default
+    gfx/paint_task.rs: 8 use azure::azure_hl::{SurfaceFormat, Color, DrawTarget, BackendType};
+    gfx/paint_task.rs: 9 use canvas_traits::CanvasMsg;
+    gfx/paint_task.rs:10 use display_list::{self, StackingContext};
+    gfx/paint_task.rs:11 use euclid::Matrix4;
+    gfx/paint_task.rs:12 use euclid::point::Point2D;
+    gfx/paint_task.rs:13 use euclid::rect::Rect;
+                         ...
+    gfx/paint_task.rs:8:5: 40:22 help: Try this...
 
     use azure::azure_hl::{BackendType, Color, DrawTarget, SurfaceFormat};
     use canvas_traits::CanvasMsg;
@@ -269,15 +271,6 @@ and, we get the following warning...
     use util::task::spawn_named;
     use util::task::spawn_named_with_send_on_failure;
     use util::task_state;
-
-    , #[warn(unsorted_declarations)] on by default
-    gfx/paint_task.rs: 8 use azure::azure_hl::{SurfaceFormat, Color, DrawTarget, BackendType};
-    gfx/paint_task.rs: 9 use canvas_traits::CanvasMsg;
-    gfx/paint_task.rs:10 use display_list::{self, StackingContext};
-    gfx/paint_task.rs:11 use euclid::Matrix4;
-    gfx/paint_task.rs:12 use euclid::point::Point2D;
-    gfx/paint_task.rs:13 use euclid::rect::Rect;
-                         ...
 
 As you can see, the first declaration `use azure::AzFloat;` has been left out, and the span has began from line 8 instead of line 7. This means that in the eyes of sorty, the first declaration stays right where it was even after sorting, but the statements following it aren't following the rule (though the second line stays where it was, its list items aren't sorted!), and so it throws the warning for all the remaining statements.
 

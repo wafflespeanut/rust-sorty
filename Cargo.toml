@@ -2,6 +2,11 @@
 name = "sorty"
 version = "0.1.0"
 authors = ["Ravi Shankar <wafflespeanut@gmail.com>"]
+repository = "https://github.com/Wafflespeanut/rust-sorty"
+readme = "README.md"
+license = "MPL-2.0"
+keywords = ["sorty", "lint", "plugin"]
 
 [lib]
+name = "sorty"
 plugin = true

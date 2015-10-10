@@ -216,10 +216,11 @@ impl EarlyLintPass for Sorty {
                                                   span = Some(sp);
                                               } format!("{}{} {};", new_list[i].1, syntax, new_list[i].0)
                                           }).collect::<Vec<String>>();
-                    let suggestion = format!("{} should be in alphabetical order!\nTry this...\n\n{}\n\n",
-                                            kind, suggestion_list.join("\n"));
+                    let message = format!("{} should be in alphabetical order!", kind);
+                    let suggestion = format!("Try this...\n\n{}\n", suggestion_list.join("\n"));
                     // unwrapping the value here, because it's quite certain that there's something in `span`
-                    cx.span_lint(UNSORTED_DECLARATIONS, span.unwrap(), &suggestion);
+                    cx.span_lint(UNSORTED_DECLARATIONS, span_start, &message);
+                    cx.sess().fileline_help(span_start, &suggestion);
                 },
                 None => (),
             }
@@ -227,7 +228,7 @@ impl EarlyLintPass for Sorty {
             // prepend given characters to the names for "biased" sorting
             fn str_for_biased_sort(string: &String, choice: bool, prepend_char: &str) -> String {
                 match choice {
-                    true => prepend_char.to_owned() + &**string,
+                    true => prepend_char.to_owned() + &string,
                     false => string.clone()
                 }
             }

@@ -32,9 +32,9 @@ git = "https://github.com/Wafflespeanut/rust-sorty"
 #![allow(unsorted_declarations)]        // stay quiet!
 ```
 
-*Remove it once you've done all the checks, when you no longer need the plugin!* I was just kidding.
+*Remove it once you've done all the checks, when you'll no longer be needing the plugin!*
 
-I'll be very happy if you just keep it :)
+I was just kidding. I'll be very happy if you just keep it :)
 
 ### Note:
 
