@@ -219,8 +219,7 @@ impl EarlyLintPass for Sorty {
                     let message = format!("{} should be in alphabetical order!", kind);
                     let suggestion = format!("Try this...\n\n{}\n", suggestion_list.join("\n"));
                     // unwrapping the value here, because it's quite certain that there's something in `span`
-                    cx.span_lint(UNSORTED_DECLARATIONS, span_start, &message);
-                    cx.sess().fileline_help(span_start, &suggestion);
+                    cx.span_lint_help(UNSORTED_DECLARATIONS, span_start, &message, &suggestion);
                 },
                 None => (),
             }

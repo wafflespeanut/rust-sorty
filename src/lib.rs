@@ -2,12 +2,13 @@
 
 #[macro_use]
 extern crate rustc;
+extern crate rustc_plugin;
 #[macro_use]
 extern crate syntax;
 
 pub mod sorty;
 
-use rustc::plugin::Registry;
+use rustc_plugin::registry::Registry;
 
 #[plugin_registrar]
 pub fn plugin_registrar(reg: &mut Registry) {
