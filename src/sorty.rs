@@ -1,6 +1,7 @@
 use rustc::lint::{EarlyContext, EarlyLintPass, LintArray, LintContext, LintPass};
 use std::cmp::Ordering;
-use syntax::ast::{Item, Item_, Lit_, MetaItem_, Mod, PathListItem_, ViewPath_, Visibility};
+use syntax::ast::{Item, ItemKind, LitKind, MetaItemKind, Mod, PathListItemKind, ViewPath_,
+                  Visibility};
 use syntax::codemap::Span;
 use syntax::print::pprust::path_to_string;
 
@@ -32,7 +33,7 @@ impl EarlyLintPass for Sorty {
             let item_name = format!("{}", item.ident.name.as_str());
             let item_span = item.span;
             match item.node.clone() {
-                Item_::ItemExternCrate(optional_name) if item_name != "std" => {
+                ItemKind::ExternCrate(optional_name) if item_name != "std" => {
                     // We've put the declaration here because, we have to sort crate declarations
                     // with respect to the renamed version (instead of the old one).
                     // Since we also don't have `pub` (indicated by the `false` below),
@@ -45,7 +46,7 @@ impl EarlyLintPass for Sorty {
                     extern_crates.push((item_name, item_attrs, item_span, false));
                 }
 
-                Item_::ItemMod(module) => {
+                ItemKind::Mod(module) => {
                     let mod_invoked_file = session_codemap.span_to_filename(item.span);
                     let mod_declared_file = session_codemap.span_to_filename(module.inner);
                     if mod_declared_file != mod_invoked_file {
@@ -55,7 +56,7 @@ impl EarlyLintPass for Sorty {
                     }
                 }
 
-                Item_::ItemUse(spanned) => {
+                ItemKind::Use(spanned) => {
                     let item_attrs = get_item_attrs(&item, true);
                     match spanned.node {
                         ViewPath_::ViewPathSimple(ref ident, ref path) => {
@@ -74,22 +75,21 @@ impl EarlyLintPass for Sorty {
 
                         ViewPath_::ViewPathList(ref path, ref list) => {
                             // TODO: track the renamed items in use lists
-                            let old_list =
-                                list.iter()
-                                    .map(|&list_item| {
-                                        match list_item.node {
-                                            PathListItem_::PathListMod { .. } => {
-                                                // this must be `self`
-                                                "self".to_owned()
-                                            }
-                                            PathListItem_::PathListIdent { name, .. } => {
-                                                let interned = name.name.as_str();
-                                                let string = &*interned;
-                                                string.to_owned()
-                                            }
-                                        }
-                                    })
-                                    .collect::<Vec<String>>();
+                            let old_list = list.iter()
+                                               .map(|&list_item| {
+                                                   match list_item.node {
+                                                       PathListItemKind::Mod { .. } => {
+                                                           // this must be `self`
+                                                           "self".to_owned()
+                                                       }
+                                                       PathListItemKind::Ident { name, .. } => {
+                                                           let interned = name.name.as_str();
+                                                           let string = &*interned;
+                                                           string.to_owned()
+                                                       }
+                                                   }
+                                               })
+                                               .collect::<Vec<String>>();
 
                             let mut new_list = old_list.clone();
                             new_list.sort_by(|a, b| {
@@ -176,18 +176,18 @@ impl EarlyLintPass for Sorty {
         }
 
         // collect the information from meta items into Strings
-        fn get_meta_as_string(meta_item: &MetaItem_) -> String {
+        fn get_meta_as_string(meta_item: &MetaItemKind) -> String {
             match *meta_item {
-                MetaItem_::MetaWord(ref string) => format!("{}", string),
-                MetaItem_::MetaList(ref string, ref meta_items) => {
+                MetaItemKind::Word(ref string) => format!("{}", string),
+                MetaItemKind::List(ref string, ref meta_items) => {
                     let stuff = meta_items.iter()
                                           .map(|meta_item| get_meta_as_string(&meta_item.node))
                                           .collect::<Vec<String>>();
                     format!("{}({})", string, stuff.join(", "))
                 }
-                MetaItem_::MetaNameValue(ref string, ref literal) => {
+                MetaItemKind::NameValue(ref string, ref literal) => {
                     let value = match literal.node {
-                        Lit_::LitStr(ref inner_str, _style) => inner_str,
+                        LitKind::Str(ref inner_str, _style) => inner_str,
                         _ => {
                             // doesn't really happen
                             panic!("unexpected literal found for meta item!")
