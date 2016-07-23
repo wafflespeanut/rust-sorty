@@ -15,7 +15,7 @@ Add this to your `Cargo.toml`...
 git = "https://github.com/Wafflespeanut/rust-sorty"
 ```
 
-... and then to the main module you wanna check,
+... and then to the top of the main module you wanna check,
 
 ``` rust
 #![feature(plugin)]
@@ -32,7 +32,7 @@ git = "https://github.com/Wafflespeanut/rust-sorty"
 #![allow(unsorted_declarations)]        // stay quiet!
 ```
 
-*Remove it once you've done all the checks, when you'll no longer be needing the plugin!*
+Remove it once you've done all the checks, when you'll no longer be needing the plugin!
 
 I was just kidding. I'll be very happy if you just keep it :)
 
@@ -40,7 +40,8 @@ I was just kidding. I'll be very happy if you just keep it :)
 
 This is a compiler lint, and it's unstable. So, make sure you're using the latest [nightly Rust](https://www.rust-lang.org/install.html). Though this lint shows an output of the lexicographically sorted declarations, it follows some rules:
 
-- stuff with `#[macro_use]` are sorted and moved to the top, since macros become visible to the surroundings [only after that declaration](https://doc.rust-lang.org/book/macros.html#scoping-and-macro-import/export), unlike others.
+- stuff with `#[macro_use]` are sorted and moved to the top, since macros become visible to the surroundings [only after their declaration](https://doc.rust-lang.org/book/macros.html#scoping-and-macro-importexport), unlike others.
 - `pub` declarations (of uses & mods) are sorted and moved to the bottom
 - `self` in use lists are moved to the left (other list items are sorted as usual)
-- Also, note that there are some stuff that aren't tracked (for now). It includes comments, spaces, renamed `use` items, etc.
+
+Also, note that there are some stuff that aren't tracked (for now). It includes comments, spaces, renamed `use` items, etc.
