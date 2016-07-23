@@ -27,8 +27,8 @@ impl EarlyLintPass for Sorty {
         let mut mods = Vec::new();
 
         for item in &module.items {
-            // I've used `format!` most of the time, because we have a mixture of Strings &
-            // InternedStrings
+            // I've made use of `format!` most of the time, because we have a mixture of
+            // `String` & `InternedString`
             let item_name = format!("{}", item.ident.name.as_str());
             let item_span = item.span;
             match item.node.clone() {
@@ -49,8 +49,7 @@ impl EarlyLintPass for Sorty {
                 ItemKind::Mod(module) => {
                     let mod_invoked_file = session_codemap.span_to_filename(item.span);
                     let mod_declared_file = session_codemap.span_to_filename(module.inner);
-                    if mod_declared_file != mod_invoked_file {
-                        // ignores inline modules
+                    if mod_declared_file != mod_invoked_file {          // ignores inline modules
                         let item_attrs = get_item_attrs(&item, true);
                         mods.push((item_name, item_attrs, item_span, false));
                     }
@@ -62,14 +61,15 @@ impl EarlyLintPass for Sorty {
                         ViewPath_::ViewPathSimple(ref ident, ref path) => {
                             let path_str = path_to_string(&path);
                             let name = ident.name.as_str();
-                            let renamed = {
-                                // `use foo as bar`
-                                let split = path_str.split(":").collect::<Vec<&str>>();
+
+                            let renamed = {     // `use foo as bar`
+                                let split = path_str.split(":").collect::<Vec<_>>();
                                 match split[split.len() - 1] == &*name {
                                     true => path_str.clone(),
                                     false => format!("{} as {}", &path_str, &name),
                                 }
                             };
+
                             uses.push((renamed, item_attrs, item_span, false));
                         }
 
@@ -84,8 +84,7 @@ impl EarlyLintPass for Sorty {
                                                        },
                                                        PathListItemKind::Ident { name, .. } => {
                                                            let interned = name.name.as_str();
-                                                           let string = &*interned;
-                                                           string.to_owned()
+                                                           (&*interned).to_owned()
                                                        },
                                                    }
                                                }).collect::<Vec<_>>();
@@ -100,13 +99,12 @@ impl EarlyLintPass for Sorty {
                             });
 
                             let mut warn = false;
-                            let use_list = format!("{}::{{{}}}",
-                                                   path_to_string(&path),
-                                                   new_list.join(", "));
-                            for i in 0..old_list.len() {
-                                if old_list[i] != new_list[i] {
-                                    warn = true;    // check whether the use list is sorted
-                                    break;
+                            let use_list = format!("{}::{{{}}}", path_to_string(&path), new_list.join(", "));
+                            for (old_stuff, new_stuff) in old_list.iter().zip(new_list.iter()) {
+                                // check whether the use list is sorted
+                                if old_stuff != new_stuff {
+                                    warn = true;
+                                    break
                                 }
                             }
 
@@ -156,17 +154,13 @@ impl EarlyLintPass for Sorty {
 
             let attr_string = attr_vec.join("\n");
             match item.vis {
-                Visibility::Public if pub_check => {
-                    match attr_string.is_empty() {
-                        true => "pub ".to_owned(),
-                        false => attr_string + "\npub ",    // `pub` for mods and uses
-                    }
+                Visibility::Public if pub_check => match attr_string.is_empty() {
+                    true => "pub ".to_owned(),
+                    false => attr_string + "\npub ",    // `pub` for mods and uses
                 },
-                _ => {
-                    match attr_string.is_empty() {
-                        true => attr_string,
-                        false => attr_string + "\n",
-                    }
+                _ => match attr_string.is_empty() {
+                    true => attr_string,
+                    false => attr_string + "\n",
                 },
             }
         }
@@ -184,7 +178,6 @@ impl EarlyLintPass for Sorty {
                 MetaItemKind::NameValue(ref string, ref literal) => {
                     let value = match literal.node {
                         LitKind::Str(ref inner_str, _style) => inner_str,
-                        // well, doesn't really happen
                         _ => panic!("unexpected literal found for meta item!"),
 
                     };
@@ -208,11 +201,10 @@ impl EarlyLintPass for Sorty {
                 }
             }
 
-            let length = old_list.len();
             let mut new_list = old_list.iter()
                                        .map(|&(ref name, ref attrs, _span, warn)| {
                                            (name.clone(), attrs.clone(), warn)
-                                       }).collect::<Vec<(String, String, bool)>>();
+                                       }).collect::<Vec<_>>();
 
             new_list.sort_by(|&(ref str_a, ref attr_a, _), &(ref str_b, ref attr_b, _)| {
                 // move the `pub` statements below
@@ -228,38 +220,28 @@ impl EarlyLintPass for Sorty {
                 new_str_a.cmp(&new_str_b)
             });
 
-            let mut index = 0;
-            let mut span = None;
-            for i in 0..length {
-                if (old_list[i].0 != new_list[i].0) || new_list[i].2 {
-                    span = Some(old_list[i].2);
-                    // only to find the index of the first unsorted declaration
-                    index = i;
-                    // because we'll be printing everything following the first unsorted one
-                    break;
+            for (i, (&(ref old_name, _, span_start, _warn),
+                     &(ref new_name, _, warn))) in old_list.iter()
+                                                               .zip(new_list.iter())
+                                                               .enumerate() {
+                if (old_name != new_name) || warn {
+                    // print all the declarations proceeding the first unsorted one
+                    let suggestion_list = new_list[i..new_list.len()]
+                                          .iter()
+                                          .map(|&(ref name, ref attrs, _)| {
+                                              format!("{}{} {};", attrs, syntax, name)
+                                          }).collect::<Vec<_>>();
+
+                    // increase the span to include more lines
+                    let mut final_span = span_start;
+                    let (_, _, old_span, _) = old_list[old_list.len() - 1];
+                    final_span.hi = old_span.hi;
+
+                    let message = format!("{} should be in alphabetical order!", kind);
+                    let suggestion = format!("Try this...\n\n{}\n", suggestion_list.join("\n"));
+                    cx.span_lint_help(UNSORTED_DECLARATIONS, final_span, &message, &suggestion);
+                    break
                 }
-            }
-
-            if let Some(span_start) = span {
-                // print all the declarations proceeding the first unsorted one
-                let suggestion_list = (index..length)
-                                          .map(|i| {
-                                              if i == length - 1 {
-                                                  // increase the span to include more lines
-                                                  let mut sp = span_start;
-                                                  sp.hi = old_list[i].2.hi;
-                                                  span = Some(sp);
-                                              }
-
-                                              format!("{}{} {};", new_list[i].1,
-                                                      syntax, new_list[i].0)
-                                          }).collect::<Vec<String>>();
-
-                let message = format!("{} should be in alphabetical order!", kind);
-                let suggestion = format!("Try this...\n\n{}\n", suggestion_list.join("\n"));
-                // unwrapping the value here, because it's quite certain that there's something
-                // in `span`
-                cx.span_lint_help(UNSORTED_DECLARATIONS, span_start, &message, &suggestion);
             }
         }
     }
