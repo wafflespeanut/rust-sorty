@@ -11,8 +11,7 @@ And yeah, this should actually be done by **[rustfmt](https://github.com/rust-la
 Add this to your `Cargo.toml`...
 
 ``` toml
-[dependencies.sorty]
-git = "https://github.com/Wafflespeanut/rust-sorty"
+sorty = "0.1.0"
 ```
 
 ... and then to the top of the main module you wanna check,

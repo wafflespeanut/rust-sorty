@@ -1,11 +1,14 @@
 [package]
 name = "sorty"
-version = "0.1.0"
-authors = ["Ravi Shankar <wafflespeanut@gmail.com>"]
+description = "A plugin to check whether the 'extern crate', 'mod' and 'use' declarations are in their sorted format"
+
 repository = "https://github.com/Wafflespeanut/rust-sorty"
 readme = "README.md"
 license = "MPL-2.0"
-keywords = ["sorty", "lint", "plugin"]
+
+version = "0.1.0"
+authors = ["Ravi Shankar <wafflespeanut@gmail.com>"]
+keywords = ["sort", "lint", "plugin", "declaration"]
 
 [lib]
 name = "sorty"
