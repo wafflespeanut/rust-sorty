@@ -1,8 +1,9 @@
 use rustc::lint::{EarlyContext, EarlyLintPass, LintArray, LintContext, LintPass};
 use std::cmp::Ordering;
-use syntax::ast::{Item, ItemKind, LitKind, MetaItemKind, Mod, PathListItemKind};
-use syntax::ast::{ViewPath_, Visibility};
+use syntax::ast::{Item, ItemKind, LitKind, MetaItemKind, Mod};
+use syntax::ast::{NestedMetaItemKind, ViewPath_, Visibility};
 use syntax::codemap::Span;
+use syntax::parse::token::keywords;
 use syntax::print::pprust::path_to_string;
 
 // Warn unsorted declarations by default (since denying is a poor choice for styling lints)
@@ -74,20 +75,17 @@ impl EarlyLintPass for Sorty {
                         }
 
                         ViewPath_::ViewPathList(ref path, ref list) => {
-                            // TODO: track the renamed items in use lists
-                            let old_list = list.iter()
-                                               .map(|&list_item| {
-                                                   match list_item.node {
-                                                       PathListItemKind::Mod { .. } => {
-                                                           // this must be `self`
-                                                           "self".to_owned()
-                                                       },
-                                                       PathListItemKind::Ident { name, .. } => {
-                                                           let interned = name.name.as_str();
-                                                           (&*interned).to_owned()
-                                                       },
-                                                   }
-                                               }).collect::<Vec<_>>();
+                            let old_list = list.iter().map(|&list_item| {
+                                if list_item.node.name.name == keywords::SelfValue.name() {
+                                    "self".to_owned()   // this must be `self`
+                                } else {
+                                    let name = list_item.node.name.name.as_str();
+                                    match list_item.node.rename {
+                                        Some(new_name) => format!("{} as {}", name, new_name),
+                                        None => (&*name).to_owned(),
+                                    }
+                                }
+                            }).collect::<Vec<_>>();
 
                             let mut new_list = old_list.clone();
                             new_list.sort_by(|a, b| {
@@ -165,23 +163,27 @@ impl EarlyLintPass for Sorty {
             }
         }
 
+        fn format_literal(lit: &LitKind) -> String {
+            match lit {
+                &LitKind::Str(ref inner_str, _) => format!("{}", inner_str),
+                _ => panic!("unexpected literal for meta item!"),
+            }
+        }
+
         // collect the information from meta items into Strings
         fn get_meta_as_string(meta_item: &MetaItemKind) -> String {
             match *meta_item {
                 MetaItemKind::Word(ref string) => format!("{}", string),
                 MetaItemKind::List(ref string, ref meta_items) => {
-                    let stuff = meta_items.iter()
-                                          .map(|meta_item| get_meta_as_string(&meta_item.node))
-                                          .collect::<Vec<_>>();
+                    let stuff = meta_items.iter().map(|meta_item| match meta_item.node {
+                        NestedMetaItemKind::MetaItem(ref meta) => get_meta_as_string(&meta.node),
+                        NestedMetaItemKind::Literal(ref value) => format_literal(&value.node),
+                    }).collect::<Vec<_>>();
+
                     format!("{}({})", string, stuff.join(", "))
                 },
                 MetaItemKind::NameValue(ref string, ref literal) => {
-                    let value = match literal.node {
-                        LitKind::Str(ref inner_str, _style) => inner_str,
-                        _ => panic!("unexpected literal found for meta item!"),
-
-                    };
-
+                    let value = format_literal(&literal.node);
                     format!("{} = \"{}\"", string, value)
                 },
             }
@@ -222,8 +224,8 @@ impl EarlyLintPass for Sorty {
 
             for (i, (&(ref old_name, _, span_start, _warn),
                      &(ref new_name, _, warn))) in old_list.iter()
-                                                               .zip(new_list.iter())
-                                                               .enumerate() {
+                                                           .zip(new_list.iter())
+                                                           .enumerate() {
                 if (old_name != new_name) || warn {
                     // print all the declarations proceeding the first unsorted one
                     let suggestion_list = new_list[i..new_list.len()]
