@@ -1,6 +1,6 @@
 use rustc::lint::{EarlyContext, EarlyLintPass, LintArray, LintContext, LintPass};
 use std::cmp::Ordering;
-use syntax::ast::{Item, ItemKind, LitKind, MetaItemKind, Mod};
+use syntax::ast::{Item, ItemKind, LitKind, MetaItemKind, Mod, NodeId};
 use syntax::ast::{NestedMetaItemKind, ViewPath_, Visibility};
 use syntax::codemap::Span;
 use syntax::parse::token::keywords;
@@ -20,7 +20,7 @@ impl LintPass for Sorty {
 
 impl EarlyLintPass for Sorty {
     // walking through all the modules is enough for our purpose
-    fn check_mod(&mut self, cx: &EarlyContext, module: &Mod, _span: Span, _id: u32) {
+    fn check_mod(&mut self, cx: &EarlyContext, module: &Mod, _span: Span, _id: NodeId) {
         // TODO: lint should stop ignoring the comments near the declarations
         let session_codemap = cx.sess.codemap();    // required only for checking inline mods
         let mut extern_crates = Vec::new();
