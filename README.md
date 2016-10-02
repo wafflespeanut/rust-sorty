@@ -1,6 +1,7 @@
 ## rust-sorty
 
 [![Build Status](https://travis-ci.org/Wafflespeanut/rust-sorty.svg?branch=master)](https://travis-ci.org/Wafflespeanut/rust-sorty)
+[![Current Version](https://meritbadge.herokuapp.com/sorty)](https://crates.io/crates/sorty)
 
 A lint to help with sorting the `extern crate`, `mod` and `use` declarations, according to the style rules. Have a look at the [detailed example](https://github.com/Wafflespeanut/rust-sorty/tree/master/EXAMPLE.md) for a start! I guess it will be very handy for large projects written in Rust (well, at least once!).
 
@@ -43,4 +44,4 @@ This is a compiler lint, and it's unstable. So, make sure you're using the lates
 - `pub` declarations (of uses & mods) are sorted and moved to the bottom
 - `self` in use lists are moved to the left (other list items are sorted as usual)
 
-Also, note that there are some stuff that aren't tracked (for now). It includes comments, spaces, renamed `use` items, etc.
+Also, note that there are some stuff that aren't tracked (for now). It includes comments, spaces, etc.
