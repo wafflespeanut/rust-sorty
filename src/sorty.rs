@@ -4,6 +4,7 @@ use syntax::ast::{Item, ItemKind, LitKind, MetaItemKind, Mod, NodeId};
 use syntax::ast::{NestedMetaItemKind, ViewPath_, Visibility};
 use syntax::codemap::Span;
 use syntax::print::pprust::path_to_string;
+use syntax::symbol::keywords;
 
 // Warn unsorted declarations by default (since denying is a poor choice for styling lints)
 declare_lint!(UNSORTED_DECLARATIONS, Warn,
@@ -18,7 +19,7 @@ impl LintPass for Sorty {
 }
 
 impl EarlyLintPass for Sorty {
-    // walking through all the modules is enough for our purpose
+    // Walking through all the modules is enough for our purpose
     fn check_mod(&mut self, cx: &EarlyContext, module: &Mod, _span: Span, _id: NodeId) {
         // TODO: lint should stop ignoring the comments near the declarations
         let session_codemap = cx.sess.codemap();    // required only for checking inline mods
@@ -31,22 +32,22 @@ impl EarlyLintPass for Sorty {
             // `String` & `InternedString`
             let item_name = format!("{}", item.ident.name.as_str());
             let item_span = item.span;
-            match item.node.clone() {
-                ItemKind::ExternCrate(optional_name) if item_name != "std" => {
+            match item.node {
+                ItemKind::ExternCrate(ref optional_name) if item_name != "std" => {
                     // We've put the declaration here because, we have to sort crate declarations
                     // with respect to the renamed version (instead of the old one).
                     // Since we also don't have `pub` (indicated by the `false` below),
                     // we could just append the declaration to the attributes.
                     let mut item_attrs = get_item_attrs(&item, false);
-                    item_attrs = match optional_name {    // for `extern crate foo as bar`
-                        Some(old_name) => format!("{}extern crate {} as", item_attrs, old_name),
+                    item_attrs = match *optional_name {    // for `extern crate foo as bar`
+                        Some(ref old_name) => format!("{}extern crate {} as", item_attrs, old_name),
                         None => format!("{}extern crate", item_attrs),
                     };
 
                     extern_crates.push((item_name, item_attrs, item_span, false));
                 }
 
-                ItemKind::Mod(module) => {
+                ItemKind::Mod(ref module) => {
                     let mod_invoked_file = session_codemap.span_to_filename(item.span);
                     let mod_declared_file = session_codemap.span_to_filename(module.inner);
                     if mod_declared_file != mod_invoked_file {          // ignores inline modules
@@ -55,7 +56,7 @@ impl EarlyLintPass for Sorty {
                     }
                 }
 
-                ItemKind::Use(spanned) => {
+                ItemKind::Use(ref spanned) => {
                     let item_attrs = get_item_attrs(&item, true);
                     match spanned.node {
                         ViewPath_::ViewPathSimple(ref ident, ref path) => {
@@ -75,7 +76,7 @@ impl EarlyLintPass for Sorty {
 
                         ViewPath_::ViewPathList(ref path, ref list) => {
                             let old_list = list.iter().map(|&list_item| {
-                                if &*list_item.node.name.name.as_str() == "self" {
+                                if list_item.node.name.name == keywords::SelfValue.name() {
                                     "self".to_owned()   // this must be `self`
                                 } else {
                                     let name = list_item.node.name.name.as_str();
@@ -110,7 +111,7 @@ impl EarlyLintPass for Sorty {
 
                         ViewPath_::ViewPathGlob(ref path) => {
                             let path_str = path_to_string(&path) + "::*";
-                            // we don't have any use statements like `use std::prelude::*`
+                            // We don't have any use statements like `use std::prelude::*`
                             // since it's done only by rustc, we can safely neglect those here
                             if !path_str.starts_with("std::") {
                                 uses.push((path_str, item_attrs, item_span, false));
@@ -122,7 +123,7 @@ impl EarlyLintPass for Sorty {
             }
         }
 
-        // we don't include the crate declaration here, because we've already appended it with the
+        // We don't include the crate declaration here, because we've already appended it with the
         // attributes
         check_sort(&extern_crates, cx, "crate declarations", "");
         check_sort(&mods, cx, "module declarations (other than inline modules)", "mod");
@@ -132,8 +133,7 @@ impl EarlyLintPass for Sorty {
         fn get_item_attrs(item: &Item, pub_check: bool) -> String {
             let mut attr_vec = item.attrs.iter().filter_map(|attr| {
                 let name = attr.value.name.as_str();
-                let kind = attr.value.node.clone();
-                let meta_string = get_meta_as_string(&name, &kind);
+                let meta_string = get_meta_as_string(&name, &attr.value.node);
                 match meta_string.starts_with("doc = ") {
                     true => None,
                     false => Some(format!("#[{}]", meta_string)),
@@ -168,18 +168,20 @@ impl EarlyLintPass for Sorty {
             }
         }
 
-        // collect the information from meta items into Strings
+        // Collect the information from meta items into Strings
         fn get_meta_as_string(name: &str, meta_item: &MetaItemKind) -> String {
             match *meta_item {
                 MetaItemKind::Word => format!("{}", name),
                 MetaItemKind::List(ref meta_items) => {
-                    let stuff = meta_items.iter().map(|meta_item| {
+                    let mut stuff = meta_items.iter().map(|meta_item| {
                         match meta_item.node {
-                            NestedMetaItemKind::MetaItem(ref meta) => get_meta_as_string(&meta.name.as_str(), &meta.node),
+                            NestedMetaItemKind::MetaItem(ref meta) =>
+                                get_meta_as_string(&meta.name.as_str(), &meta.node),
                             NestedMetaItemKind::Literal(ref value) => format_literal(&value.node),
                         }
                     }).collect::<Vec<_>>();
 
+                    stuff.sort();
                     format!("{}({})", name, stuff.join(", "))
                 },
                 MetaItemKind::NameValue(ref literal) => {
@@ -189,7 +191,7 @@ impl EarlyLintPass for Sorty {
             }
         }
 
-        // checks the sorting of all the declarations and raises warnings whenever necessary
+        // Checks the sorting of all the declarations and raises warnings whenever necessary
         // takes a slice of tuples with name, related attributes, spans and whether to warn for
         // unordered use lists
         fn check_sort(old_list: &[(String, String, Span, bool)], cx: &EarlyContext,
@@ -203,10 +205,9 @@ impl EarlyLintPass for Sorty {
                 }
             }
 
-            let mut new_list = old_list.iter()
-                                       .map(|&(ref name, ref attrs, _span, warn)| {
-                                           (name.clone(), attrs.clone(), warn)
-                                       }).collect::<Vec<_>>();
+            let mut new_list = old_list.iter().map(|&(ref name, ref attrs, _span, warn)| {
+               (name.clone(), attrs.clone(), warn)
+            }).collect::<Vec<_>>();
 
             new_list.sort_by(|&(ref str_a, ref attr_a, _), &(ref str_b, ref attr_b, _)| {
                 // move the `pub` statements below
