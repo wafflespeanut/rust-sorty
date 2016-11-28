@@ -3,7 +3,6 @@ use std::cmp::Ordering;
 use syntax::ast::{Item, ItemKind, LitKind, MetaItemKind, Mod, NodeId};
 use syntax::ast::{NestedMetaItemKind, ViewPath_, Visibility};
 use syntax::codemap::Span;
-use syntax::parse::token::keywords;
 use syntax::print::pprust::path_to_string;
 
 // Warn unsorted declarations by default (since denying is a poor choice for styling lints)
@@ -76,7 +75,7 @@ impl EarlyLintPass for Sorty {
 
                         ViewPath_::ViewPathList(ref path, ref list) => {
                             let old_list = list.iter().map(|&list_item| {
-                                if list_item.node.name.name == keywords::SelfValue.name() {
+                                if &*list_item.node.name.name.as_str() == "self" {
                                     "self".to_owned()   // this must be `self`
                                 } else {
                                     let name = list_item.node.name.name.as_str();
@@ -131,16 +130,15 @@ impl EarlyLintPass for Sorty {
 
         // for collecting, formatting & filtering the attributes (and checking the visibility)
         fn get_item_attrs(item: &Item, pub_check: bool) -> String {
-            let mut attr_vec = item.attrs
-                                   .iter()
-                                   .filter_map(|attr| {
-                                       let meta_item = attr.node.value.node.clone();
-                                       let meta_string = get_meta_as_string(&meta_item);
-                                       match meta_string.starts_with("doc = ") {
-                                           true => None,
-                                           false => Some(format!("#[{}]", meta_string)),
-                                       }
-                                   }).collect::<Vec<_>>();
+            let mut attr_vec = item.attrs.iter().filter_map(|attr| {
+                let name = attr.value.name.as_str();
+                let kind = attr.value.node.clone();
+                let meta_string = get_meta_as_string(&name, &kind);
+                match meta_string.starts_with("doc = ") {
+                    true => None,
+                    false => Some(format!("#[{}]", meta_string)),
+                }
+            }).collect::<Vec<_>>();
 
             attr_vec.sort_by(|a, b| {
                 match (&**a, &**b) {    // put `macro_use` first for later checking
@@ -171,20 +169,22 @@ impl EarlyLintPass for Sorty {
         }
 
         // collect the information from meta items into Strings
-        fn get_meta_as_string(meta_item: &MetaItemKind) -> String {
+        fn get_meta_as_string(name: &str, meta_item: &MetaItemKind) -> String {
             match *meta_item {
-                MetaItemKind::Word(ref string) => format!("{}", string),
-                MetaItemKind::List(ref string, ref meta_items) => {
-                    let stuff = meta_items.iter().map(|meta_item| match meta_item.node {
-                        NestedMetaItemKind::MetaItem(ref meta) => get_meta_as_string(&meta.node),
-                        NestedMetaItemKind::Literal(ref value) => format_literal(&value.node),
+                MetaItemKind::Word => format!("{}", name),
+                MetaItemKind::List(ref meta_items) => {
+                    let stuff = meta_items.iter().map(|meta_item| {
+                        match meta_item.node {
+                            NestedMetaItemKind::MetaItem(ref meta) => get_meta_as_string(&meta.name.as_str(), &meta.node),
+                            NestedMetaItemKind::Literal(ref value) => format_literal(&value.node),
+                        }
                     }).collect::<Vec<_>>();
 
-                    format!("{}({})", string, stuff.join(", "))
+                    format!("{}({})", name, stuff.join(", "))
                 },
-                MetaItemKind::NameValue(ref string, ref literal) => {
+                MetaItemKind::NameValue(ref literal) => {
                     let value = format_literal(&literal.node);
-                    format!("{} = \"{}\"", string, value)
+                    format!("{} = \"{}\"", name, value)
                 },
             }
         }
