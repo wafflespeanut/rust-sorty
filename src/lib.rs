@@ -3,7 +3,6 @@
 #[macro_use]
 extern crate rustc;
 extern crate rustc_plugin;
-#[macro_use]
 extern crate syntax;
 
 pub mod sorty;

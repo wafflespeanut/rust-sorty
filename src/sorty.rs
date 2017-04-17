@@ -132,12 +132,13 @@ impl EarlyLintPass for Sorty {
         // for collecting, formatting & filtering the attributes (and checking the visibility)
         fn get_item_attrs(item: &Item, pub_check: bool) -> String {
             let mut attr_vec = item.attrs.iter().filter_map(|attr| {
-                let name = attr.value.name.as_str();
-                let meta_string = get_meta_as_string(&name, &attr.value.node);
-                match meta_string.starts_with("doc = ") {
-                    true => None,
-                    false => Some(format!("#[{}]", meta_string)),
-                }
+                attr.meta().and_then(|meta| {
+                    let meta_string = get_meta_as_string(&meta.name.as_str(), &meta.node);
+                    match meta_string.starts_with("doc = ") {
+                        true => None,
+                        false => Some(format!("#[{}]", meta_string)),
+                    }
+                })
             }).collect::<Vec<_>>();
 
             attr_vec.sort_by(|a, b| {

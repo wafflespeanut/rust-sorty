@@ -6,7 +6,7 @@ repository = "https://github.com/Wafflespeanut/rust-sorty"
 readme = "README.md"
 license = "MPL-2.0"
 
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Ravi Shankar <wafflespeanut@gmail.com>"]
 keywords = ["sort", "lint", "plugin", "declaration"]
 
